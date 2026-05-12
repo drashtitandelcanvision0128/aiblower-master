@@ -7,6 +7,8 @@ WORKDIR /app
 
 # Install dependencies based on the preferred package manager
 COPY package.json package-lock.json* ./
+# Cache bust to force fresh dependency installation
+RUN echo "Cache bust: $(date)" > /tmp/cache-bust
 RUN npm ci --include=dev
 
 # Rebuild the source code only when needed
