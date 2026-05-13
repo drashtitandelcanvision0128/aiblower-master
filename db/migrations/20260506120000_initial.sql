@@ -1,4 +1,4 @@
--- AIbowler: slots, bookings, admin_users (Postgres only, no Supabase auth), confirmation RPC
+-- AIbowler: slots, bookings, admin_users (Postgres + app-managed admin auth), confirmation RPC
 
 create extension if not exists "pgcrypto";
 

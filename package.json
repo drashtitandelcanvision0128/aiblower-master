@@ -8,6 +8,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "clean": "node scripts/clean-build.mjs",
+    "rebuild": "npm run clean && npm run build",
     "start": "node scripts/start-production.mjs",
     "lint": "eslint",
     "create-admin": "node scripts/create-admin.mjs",

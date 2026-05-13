@@ -13,7 +13,7 @@ if (!existsSync(standalone)) {
       "  npm run build",
       "",
       "This app uses Next.js output: \"standalone\". Do not use \"next start\"; it is unsupported",
-      "for this configuration and can load an outdated .next bundle (e.g. old Supabase code).",
+      "for this configuration and can load a stale .next cache from an older deploy.",
     ].join("\n"),
   );
   process.exit(1);
