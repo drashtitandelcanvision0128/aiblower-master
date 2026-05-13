@@ -5,7 +5,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 ## Stack
 
 - [Next.js](https://nextjs.org/) (App Router) + TypeScript
-- [Supabase](https://supabase.com/) (Postgres, Auth, RLS)
+- [PostgreSQL](https://www.postgresql.org/) (direct access via `pg`; no Supabase)
 - [Razorpay](https://razorpay.com/) (Orders + Checkout + webhooks)
 - [Twilio](https://www.twilio.com/) (admin WhatsApp + optional customer SMS)
 
@@ -17,14 +17,18 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
    npm install
    ```
 
-2. **Supabase**
+2. **PostgreSQL**
 
-   - Create a project in the Supabase dashboard.
-   - Run SQL migrations in order from [`supabase/migrations`](supabase/migrations) (SQL editor: paste each file, or use [Supabase CLI](https://supabase.com/docs/guides/cli) `supabase db push` if you link the project).
+   - Install Postgres locally or use a managed instance.
+   - Run SQL migrations **in order** from [`supabase/migrations`](supabase/migrations) (e.g. `psql` with your connection string, or any SQL client). The folder name is historical; migrations are plain Postgres.
 
 3. **Environment**
 
-   Copy [`.env.example`](.env.example) to `.env.local` and fill values from Supabase (Settings → API) and Razorpay (API keys + Webhooks secret).
+   Copy [`.env.example`](.env.example) to `.env` or `.env.local` and set:
+
+   - Database: `DATABASE_URL` **or** `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, etc.
+   - `ADMIN_SESSION_SECRET` — long random string (used to sign the admin session cookie).
+   - Razorpay and optional Twilio variables as documented below.
 
 4. **Booking notifications (after successful payment)**
 
@@ -45,12 +49,13 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
 6. **Admin user**
 
-   - In Supabase: Authentication → add a user (email/password or magic link).
-   - In SQL editor, grant admin (replace the UUID with `auth.users.id`):
+   Create the first admin in the `admin_users` table (bcrypt password hash):
 
-     ```sql
-     insert into public.admin_users (user_id) values ('YOUR-USER-UUID');
-     ```
+   ```bash
+   npm run create-admin -- you@example.com 'your-secure-password'
+   ```
+
+   Sign in at `/admin/login`. To change email or password later, use the **Admin account** section on `/admin` (current password required).
 
 7. **Run locally**
 
@@ -87,7 +92,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
 - `src/app` – routes (home, book, admin)
 - `src/app/api` – booking initiation, Razorpay webhook, admin APIs
-- `supabase/migrations` – schema, RLS, seed slots, payment confirmation RPC
+- `supabase/migrations` – SQL schema and seed (Postgres only)
 
 ## Scripts
 
@@ -96,3 +101,4 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint             |
+| `npm run migrate` | Apply SQL migrations in `supabase/migrations` (tracked in `schema_migrations`; safe to re-run) |

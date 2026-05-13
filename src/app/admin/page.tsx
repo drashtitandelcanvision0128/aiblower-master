@@ -1,9 +1,7 @@
 "use client";
 
-import type { SupabaseClient } from "@supabase/supabase-js";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 import { formatInrFromPaise, formatSlotRange } from "@/lib/format";
 import { adminBookingPatchSchema } from "@/lib/validation";
 
@@ -34,7 +32,6 @@ const STATUSES = ["pending_payment", "confirmed", "cancelled", "expired"] as con
 
 export default function AdminDashboardPage() {
   const router = useRouter();
-  const [supabase, setSupabase] = useState<SupabaseClient | null>(null);
   const [rows, setRows] = useState<BookingRow[]>([]);
   const [slots, setSlots] = useState<SlotRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -43,66 +40,122 @@ export default function AdminDashboardPage() {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<BookingRow | null>(null);
   const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      setSupabase(createClient());
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, []);
+  const [profileName, setProfileName] = useState("");
+  const [profileEmail, setProfileEmail] = useState("");
+  const [loadedEmail, setLoadedEmail] = useState("");
+  const [profileCurrentPassword, setProfileCurrentPassword] = useState("");
+  const [profilePassword, setProfilePassword] = useState("");
+  const [profilePassword2, setProfilePassword2] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileMessage, setProfileMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!supabase) return;
     setLoading(true);
     setError(null);
-    const { data: bookingData, error: bErr } = await supabase
-      .from("bookings")
-      .select(
-        `
-        id,
-        customer_name,
-        customer_phone,
-        status,
-        amount_paise,
-        currency,
-        created_at,
-        razorpay_order_id,
-        razorpay_payment_id,
-        slot_id,
-        slots ( id, start_at, end_at, price_paise, capacity, is_active )
-      `,
-      )
-      .order("created_at", { ascending: false })
-      .limit(300);
+    try {
+      const [bRes, sRes] = await Promise.all([
+        fetch("/api/admin/bookings", { credentials: "include" }),
+        fetch("/api/admin/slots", { credentials: "include" }),
+      ]);
 
-    if (bErr) {
-      setError(bErr.message);
+      if (bRes.status === 401 || sRes.status === 401) {
+        router.replace("/admin/login");
+        router.refresh();
+        return;
+      }
+
+      if (!bRes.ok) {
+        const j = (await bRes.json()) as { error?: string };
+        setError(j.error ?? "Could not load bookings");
+        setRows([]);
+      } else {
+        const j = (await bRes.json()) as { bookings?: BookingRow[] };
+        setRows(j.bookings ?? []);
+      }
+
+      if (sRes.ok) {
+        const j = (await sRes.json()) as { slots?: SlotRow[] };
+        setSlots(j.slots ?? []);
+      }
+    } catch {
+      setError("Network error");
       setRows([]);
-    } else {
-      setRows((bookingData as BookingRow[]) ?? []);
     }
-
-    const { data: slotData, error: sErr } = await supabase
-      .from("slots")
-      .select("id, start_at, end_at, price_paise, capacity, is_active")
-      .eq("is_active", true)
-      .order("start_at", { ascending: true })
-      .limit(400);
-
-    if (!sErr) {
-      setSlots((slotData as SlotRow[]) ?? []);
-    }
-
     setLoading(false);
-  }, [supabase]);
+  }, [router]);
 
   useEffect(() => {
-    if (!supabase) return;
-    const t = window.setTimeout(() => {
-      void load();
-    }, 0);
-    return () => window.clearTimeout(t);
-  }, [supabase, load]);
+    void load();
+  }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      const res = await fetch("/api/admin/me", { credentials: "include" });
+      if (!res.ok) return;
+      const d = (await res.json()) as { email?: string; displayName?: string };
+      const em = d.email ?? "";
+      setProfileEmail(em);
+      setLoadedEmail(em);
+      setProfileName(d.displayName ?? "");
+    })();
+  }, []);
+
+  const saveProfile = async () => {
+    setProfileMessage(null);
+    if (profilePassword && profilePassword !== profilePassword2) {
+      setProfileMessage("New password and confirmation do not match.");
+      return;
+    }
+    if (profilePassword && profilePassword.length < 6) {
+      setProfileMessage("Password must be at least 6 characters.");
+      return;
+    }
+
+    const emailChanged = profileEmail.trim() !== loadedEmail.trim();
+    const settingPw = profilePassword.trim() !== "";
+    if ((emailChanged || settingPw) && !profileCurrentPassword.trim()) {
+      setProfileMessage("Enter your current password to change email or set a new password.");
+      return;
+    }
+
+    setProfileSaving(true);
+    try {
+      const res = await fetch("/api/admin/profile", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          displayName: profileName.trim(),
+          email: profileEmail.trim(),
+          currentPassword: profileCurrentPassword || undefined,
+          newPassword: profilePassword || undefined,
+          newPasswordConfirm: profilePassword2 || undefined,
+        }),
+      });
+      const data = (await res.json()) as { error?: unknown; email?: string };
+      if (!res.ok) {
+        const msg =
+          typeof data.error === "string"
+            ? data.error
+            : "Could not save profile. Check your password and try again.";
+        setProfileMessage(msg);
+        setProfileSaving(false);
+        return;
+      }
+
+      setProfilePassword("");
+      setProfilePassword2("");
+      setProfileCurrentPassword("");
+      if (typeof data.email === "string") {
+        setLoadedEmail(data.email);
+        setProfileEmail(data.email);
+      }
+      setProfileMessage("Saved.");
+    } catch {
+      setProfileMessage("Network error");
+    }
+    setProfileSaving(false);
+  };
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
@@ -121,8 +174,7 @@ export default function AdminDashboardPage() {
   }, [rows, statusFilter, search]);
 
   const signOut = async () => {
-    if (!supabase) return;
-    await supabase.auth.signOut();
+    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
     router.replace("/admin/login");
     router.refresh();
   };
@@ -140,7 +192,7 @@ export default function AdminDashboardPage() {
   };
 
   const saveEdit = async () => {
-    if (!editing || !supabase) return;
+    if (!editing) return;
     const slot = Array.isArray(editing.slots) ? editing.slots[0] : editing.slots;
     const parsed = adminBookingPatchSchema.safeParse({
       customerName: editing.customer_name,
@@ -155,22 +207,33 @@ export default function AdminDashboardPage() {
 
     setSaving(true);
     setError(null);
-    const patch: Record<string, unknown> = {
-      customer_name: parsed.data.customerName ?? editing.customer_name,
-      customer_phone: parsed.data.customerPhone ?? editing.customer_phone,
-      status: parsed.data.status ?? editing.status,
-      slot_id: parsed.data.slotId ?? editing.slot_id,
-      amount_paise: slot?.price_paise ?? editing.amount_paise,
-    };
+    try {
+      const res = await fetch(`/api/admin/bookings/${editing.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerName: parsed.data.customerName ?? editing.customer_name,
+          customerPhone: parsed.data.customerPhone ?? editing.customer_phone,
+          slotId: parsed.data.slotId ?? editing.slot_id,
+          status: parsed.data.status ?? editing.status,
+        }),
+      });
 
-    const { error: uErr } = await supabase.from("bookings").update(patch).eq("id", editing.id);
-    setSaving(false);
-    if (uErr) {
-      setError(uErr.message);
-      return;
+      if (!res.ok) {
+        const j = (await res.json()) as { error?: unknown };
+        const msg = typeof j.error === "string" ? j.error : "Update failed";
+        setError(msg);
+        setSaving(false);
+        return;
+      }
+
+      setEditing(null);
+      await load();
+    } catch {
+      setError("Network error");
     }
-    setEditing(null);
-    await load();
+    setSaving(false);
   };
 
   const slotOptionsForEdit = useMemo(() => {
@@ -201,6 +264,96 @@ export default function AdminDashboardPage() {
           Sign out
         </button>
       </div>
+
+      <section className="mt-10 rounded-2xl border border-emerald-800/50 bg-[#042f1f]/40 p-6">
+        <h2 className="text-lg font-semibold text-white">Admin account</h2>
+        <p className="mt-1 text-sm text-emerald-100/70">
+          Display name, email, and a bcrypt password hash live in{" "}
+          <code className="text-emerald-200/90">admin_users</code> in Postgres. Use “Current password”
+          when you change email or password.
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label htmlFor="profile-name" className="block text-xs text-emerald-200/80">
+              Display name
+            </label>
+            <input
+              id="profile-name"
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-emerald-800/60 bg-[#021910] px-3 py-2 text-sm text-white"
+              autoComplete="name"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="profile-email" className="block text-xs text-emerald-200/80">
+              Email
+            </label>
+            <input
+              id="profile-email"
+              type="email"
+              value={profileEmail}
+              onChange={(e) => setProfileEmail(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-emerald-800/60 bg-[#021910] px-3 py-2 text-sm text-white"
+              autoComplete="email"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <label htmlFor="profile-current-pw" className="block text-xs text-emerald-200/80">
+              Current password (required to change email or password)
+            </label>
+            <input
+              id="profile-current-pw"
+              type="password"
+              value={profileCurrentPassword}
+              onChange={(e) => setProfileCurrentPassword(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-emerald-800/60 bg-[#021910] px-3 py-2 text-sm text-white"
+              autoComplete="current-password"
+            />
+          </div>
+          <div>
+            <label htmlFor="profile-pw" className="block text-xs text-emerald-200/80">
+              New password (optional)
+            </label>
+            <input
+              id="profile-pw"
+              type="password"
+              value={profilePassword}
+              onChange={(e) => setProfilePassword(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-emerald-800/60 bg-[#021910] px-3 py-2 text-sm text-white"
+              autoComplete="new-password"
+            />
+          </div>
+          <div>
+            <label htmlFor="profile-pw2" className="block text-xs text-emerald-200/80">
+              Confirm new password
+            </label>
+            <input
+              id="profile-pw2"
+              type="password"
+              value={profilePassword2}
+              onChange={(e) => setProfilePassword2(e.target.value)}
+              className="mt-1 w-full rounded-lg border border-emerald-800/60 bg-[#021910] px-3 py-2 text-sm text-white"
+              autoComplete="new-password"
+            />
+          </div>
+        </div>
+        {profileMessage ? (
+          <p className="mt-4 text-sm text-emerald-200/90" role="status">
+            {profileMessage}
+          </p>
+        ) : null}
+        <div className="mt-4">
+          <button
+            type="button"
+            disabled={profileSaving}
+            onClick={() => void saveProfile()}
+            className="rounded-full bg-emerald-400 px-5 py-2 text-sm font-semibold text-emerald-950 hover:bg-emerald-300 disabled:opacity-50"
+          >
+            {profileSaving ? "Saving…" : "Save account"}
+          </button>
+        </div>
+      </section>
 
       <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:items-end">
         <div>
@@ -248,7 +401,7 @@ export default function AdminDashboardPage() {
         </p>
       ) : null}
 
-      {!supabase || loading ? (
+      {loading ? (
         <p className="mt-8 text-sm text-emerald-200/80">Loading…</p>
       ) : (
         <div className="mt-8 overflow-x-auto rounded-xl border border-emerald-800/50">

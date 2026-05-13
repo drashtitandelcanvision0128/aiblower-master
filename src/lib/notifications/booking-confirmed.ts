@@ -1,9 +1,7 @@
-import { createAdminClient } from "@/lib/supabase/admin";
 import { formatInrFromPaise, formatSlotRange } from "@/lib/format";
+import { getPool } from "@/lib/db/pool";
 import { indiaPhoneToE164 } from "@/lib/notifications/phone";
 import { sendTwilioSms, sendTwilioWhatsApp } from "@/lib/whatsapp/twilio";
-
-type SlotJoin = { start_at: string; end_at: string } | { start_at: string; end_at: string }[] | null;
 
 type BookingRow = {
   id: string;
@@ -13,19 +11,16 @@ type BookingRow = {
   currency: string;
   razorpay_payment_id: string | null;
   razorpay_order_id: string | null;
-  notifications_sent_at: string | null;
-  slots: SlotJoin;
+  notifications_sent_at: Date | null;
+  start_at: Date | null;
+  end_at: Date | null;
 };
 
-function slotFromRow(row: BookingRow) {
-  const s = row.slots;
-  if (Array.isArray(s)) return s[0] ?? null;
-  return s;
-}
-
 function buildDetailsText(row: BookingRow) {
-  const slot = slotFromRow(row);
-  const slotLine = slot ? formatSlotRange(slot.start_at, slot.end_at) : "Slot: (unknown)";
+  const slotLine =
+    row.start_at && row.end_at
+      ? formatSlotRange(row.start_at.toISOString(), row.end_at.toISOString())
+      : "Slot: (unknown)";
   const amount = formatInrFromPaise(row.amount_paise);
   return [
     `Booking ID: ${row.id}`,
@@ -44,38 +39,35 @@ function buildDetailsText(row: BookingRow) {
  * Idempotent: only the first successful DB claim sends notifications.
  */
 export async function sendBookingConfirmedNotifications(bookingId: string) {
-  const admin = createAdminClient();
+  const pool = getPool();
 
-  const { data: row, error: readError } = await admin
-    .from("bookings")
-    .select(
-      `
-      id,
-      customer_name,
-      customer_phone,
-      amount_paise,
-      currency,
-      razorpay_payment_id,
-      razorpay_order_id,
-      notifications_sent_at,
-      slots ( start_at, end_at )
+  const { rows: readRows } = await pool.query<BookingRow>(
+    `
+    SELECT
+      b.id,
+      b.customer_name,
+      b.customer_phone,
+      b.amount_paise,
+      b.currency,
+      b.razorpay_payment_id,
+      b.razorpay_order_id,
+      b.notifications_sent_at,
+      s.start_at,
+      s.end_at
+    FROM bookings b
+    JOIN slots s ON s.id = b.slot_id
+    WHERE b.id = $1 AND b.status = 'confirmed'
+    LIMIT 1
     `,
-    )
-    .eq("id", bookingId)
-    .eq("status", "confirmed")
-    .maybeSingle();
+    [bookingId],
+  );
 
-  if (readError) {
-    console.error("[notifications] read failed", readError);
-    throw readError;
-  }
-
+  const row = readRows[0];
   if (!row) {
     return { skipped: true as const, reason: "not_found_or_not_confirmed" as const };
   }
 
-  const booking = row as BookingRow;
-  if (booking.notifications_sent_at) {
+  if (row.notifications_sent_at) {
     return { skipped: true as const, reason: "already_sent" as const };
   }
 
@@ -89,7 +81,7 @@ export async function sendBookingConfirmedNotifications(bookingId: string) {
     !!process.env.TWILIO_WHATSAPP_FROM;
   let canCustomerSms = false;
   try {
-    indiaPhoneToE164(booking.customer_phone);
+    indiaPhoneToE164(row.customer_phone);
     canCustomerSms = !!smsFrom && !!process.env.TWILIO_ACCOUNT_SID && !!process.env.TWILIO_AUTH_TOKEN;
   } catch {
     canCustomerSms = false;
@@ -102,37 +94,35 @@ export async function sendBookingConfirmedNotifications(bookingId: string) {
     return { skipped: true as const, reason: "no_channels" as const };
   }
 
-  const { data: claimed, error: claimError } = await admin
-    .from("bookings")
-    .update({ notifications_sent_at: new Date().toISOString() })
-    .eq("id", bookingId)
-    .eq("status", "confirmed")
-    .is("notifications_sent_at", null)
-    .select(
-      `
-      id,
-      customer_name,
-      customer_phone,
-      amount_paise,
-      currency,
-      razorpay_payment_id,
-      razorpay_order_id,
-      slots ( start_at, end_at )
+  const { rows: claimedRows } = await pool.query<BookingRow>(
+    `
+    UPDATE bookings b
+    SET notifications_sent_at = now(), updated_at = now()
+    FROM slots s
+    WHERE b.id = $1
+      AND b.slot_id = s.id
+      AND b.status = 'confirmed'
+      AND b.notifications_sent_at IS NULL
+    RETURNING
+      b.id,
+      b.customer_name,
+      b.customer_phone,
+      b.amount_paise,
+      b.currency,
+      b.razorpay_payment_id,
+      b.razorpay_order_id,
+      s.start_at,
+      s.end_at
     `,
-    )
-    .maybeSingle();
+    [bookingId],
+  );
 
-  if (claimError) {
-    console.error("[notifications] claim failed", claimError);
-    throw claimError;
-  }
-
+  const claimed = claimedRows[0];
   if (!claimed) {
     return { skipped: true as const, reason: "claim_lost" as const };
   }
 
-  const claimedRow = claimed as BookingRow;
-  const detailsText = buildDetailsText(claimedRow);
+  const detailsText = buildDetailsText(claimed);
 
   const tasks: Promise<void>[] = [];
 
@@ -149,7 +139,7 @@ export async function sendBookingConfirmedNotifications(bookingId: string) {
 
   if (canCustomerSms) {
     try {
-      const to = indiaPhoneToE164(claimedRow.customer_phone);
+      const to = indiaPhoneToE164(claimed.customer_phone);
       tasks.push(
         sendTwilioSms({
           toE164: to,

@@ -1,4 +1,4 @@
--- AIbowler: slots, bookings, admin_users, RLS, confirmation RPC
+-- AIbowler: slots, bookings, admin_users (Postgres only, no Supabase auth), confirmation RPC
 
 create extension if not exists "pgcrypto";
 
@@ -46,8 +46,15 @@ create unique index bookings_one_confirmed_per_slot
   where status = 'confirmed';
 
 create table public.admin_users (
-  user_id uuid primary key references auth.users (id) on delete cascade
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  password_hash text not null,
+  display_name text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
 );
+
+create unique index admin_users_email_lower_idx on public.admin_users (lower(email));
 
 create or replace function public.set_updated_at()
 returns trigger
@@ -61,6 +68,11 @@ $$;
 
 create trigger bookings_set_updated_at
   before update on public.bookings
+  for each row
+  execute procedure public.set_updated_at();
+
+create trigger admin_users_set_updated_at
+  before update on public.admin_users
   for each row
   execute procedure public.set_updated_at();
 
@@ -93,57 +105,7 @@ begin
 end;
 $$;
 
-revoke all on function public.confirm_booking_payment(text, text) from public;
-grant execute on function public.confirm_booking_payment(text, text) to service_role;
-
--- RLS
-alter table public.slots enable row level security;
-alter table public.bookings enable row level security;
-alter table public.admin_users enable row level security;
-
-create policy admin_users_self_read
-  on public.admin_users
-  for select
-  to authenticated
-  using (user_id = auth.uid());
-
-create policy admin_slots_select
-  on public.slots
-  for select
-  to authenticated
-  using (
-    exists (select 1 from public.admin_users a where a.user_id = auth.uid())
-  );
-
-create policy admin_slots_update
-  on public.slots
-  for update
-  to authenticated
-  using (
-    exists (select 1 from public.admin_users a where a.user_id = auth.uid())
-  )
-  with check (
-    exists (select 1 from public.admin_users a where a.user_id = auth.uid())
-  );
-
-create policy admin_bookings_select
-  on public.bookings
-  for select
-  to authenticated
-  using (
-    exists (select 1 from public.admin_users a where a.user_id = auth.uid())
-  );
-
-create policy admin_bookings_update
-  on public.bookings
-  for update
-  to authenticated
-  using (
-    exists (select 1 from public.admin_users a where a.user_id = auth.uid())
-  )
-  with check (
-    exists (select 1 from public.admin_users a where a.user_id = auth.uid())
-  );
+grant execute on function public.confirm_booking_payment(text, text) to public;
 
 -- Seed slots: two 30-minute evening windows (8:00 PM, 8:30 PM) for next 14 days
 insert into public.slots (start_at, end_at, price_paise)

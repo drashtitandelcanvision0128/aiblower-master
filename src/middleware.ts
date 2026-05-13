@@ -1,74 +1,47 @@
-import { createServerClient } from "@supabase/ssr";
+import { jwtVerify } from "jose";
 import { NextResponse, type NextRequest } from "next/server";
-import { getSupabaseEnv } from "@/lib/supabase/env";
+import { ADMIN_SESSION_COOKIE } from "@/lib/auth/constants";
 
 export async function middleware(request: NextRequest) {
-  const { url, publicKey } = getSupabaseEnv();
-  if (!url || !publicKey) {
-    return NextResponse.next({ request });
-  }
-
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    url,
-    publicKey,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
-          supabaseResponse = NextResponse.next({ request });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options),
-          );
-        },
-      },
-    },
-  );
-
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
   const path = request.nextUrl.pathname;
   const isAdminLogin = path === "/admin/login" || path.startsWith("/admin/login/");
   const isAdminArea = path.startsWith("/admin");
 
   if (!isAdminArea) {
-    return supabaseResponse;
+    return NextResponse.next();
   }
 
-  if (isAdminLogin) {
-    if (user) {
-      const { data: adminRow } = await supabase
-        .from("admin_users")
-        .select("user_id")
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (adminRow) {
-        return NextResponse.redirect(new URL("/admin", request.url));
-      }
+  const secretRaw = process.env.ADMIN_SESSION_SECRET?.trim();
+  if (!secretRaw || secretRaw.length < 16) {
+    if (isAdminLogin) {
+      return NextResponse.next();
     }
-    return supabaseResponse;
-  }
-
-  if (!user) {
-    return NextResponse.redirect(new URL("/admin/login", request.url));
-  }
-
-  const { data: adminRow } = await supabase
-    .from("admin_users")
-    .select("user_id")
-    .eq("user_id", user.id)
-    .maybeSingle();
-
-  if (!adminRow) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 
-  return supabaseResponse;
+  const token = request.cookies.get(ADMIN_SESSION_COOKIE)?.value;
+  let valid = false;
+  if (token) {
+    try {
+      await jwtVerify(token, new TextEncoder().encode(secretRaw), { algorithms: ["HS256"] });
+      valid = true;
+    } catch {
+      valid = false;
+    }
+  }
+
+  if (isAdminLogin) {
+    if (valid) {
+      return NextResponse.redirect(new URL("/admin", request.url));
+    }
+    return NextResponse.next();
+  }
+
+  if (!valid) {
+    return NextResponse.redirect(new URL("/admin/login", request.url));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {

@@ -26,3 +26,30 @@ export const adminBookingPatchSchema = z.object({
   slotId: z.string().uuid().optional(),
   status: z.enum(["pending_payment", "confirmed", "cancelled", "expired"]).optional(),
 });
+
+export const adminProfilePatchSchema = z
+  .object({
+    displayName: z.string().trim().max(200).optional(),
+    email: z.string().trim().email().optional(),
+    currentPassword: z.string().optional(),
+    newPassword: z.string().min(6).optional(),
+    newPasswordConfirm: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (data.newPassword) {
+      if (!data.currentPassword) {
+        ctx.addIssue({
+          code: "custom",
+          message: "currentPassword is required to set a new password",
+          path: ["currentPassword"],
+        });
+      }
+      if (data.newPassword !== data.newPasswordConfirm) {
+        ctx.addIssue({
+          code: "custom",
+          message: "newPassword and newPasswordConfirm must match",
+          path: ["newPasswordConfirm"],
+        });
+      }
+    }
+  });

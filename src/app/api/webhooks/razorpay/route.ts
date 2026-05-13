@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getPool } from "@/lib/db/pool";
 import { sendBookingConfirmedNotifications } from "@/lib/notifications/booking-confirmed";
 
 export const dynamic = "force-dynamic";
@@ -73,24 +73,12 @@ export async function POST(request: Request) {
   );
 
   if (event === "payment.captured" && orderId && paymentId) {
-    const admin = createAdminClient();
-    const { data: bookingId, error } = await admin.rpc("confirm_booking_payment", {
-      p_order_id: orderId,
-      p_payment_id: paymentId,
-    });
-
-    if (error) {
-      console.error(
-        JSON.stringify({
-          scope: "razorpay_webhook_confirm",
-          event,
-          ok: false,
-          rpcError: error.message,
-        }),
-        error,
-      );
-      return NextResponse.json({ ok: false }, { status: 500 });
-    }
+    const pool = getPool();
+    const { rows } = await pool.query<{ booking_id: string | null }>(
+      `SELECT confirm_booking_payment($1::text, $2::text) AS booking_id`,
+      [orderId, paymentId],
+    );
+    const bookingId = rows[0]?.booking_id ?? null;
 
     if (!bookingId) {
       console.log(

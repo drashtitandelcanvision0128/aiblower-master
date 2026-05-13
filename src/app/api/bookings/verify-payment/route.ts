@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { getPool } from "@/lib/db/pool";
 import { getRazorpay } from "@/lib/razorpay";
 import { sendBookingConfirmedNotifications } from "@/lib/notifications/booking-confirmed";
 import { verifyPaymentSchema } from "@/lib/validation";
@@ -75,19 +75,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Could not verify payment with Razorpay" }, { status: 502 });
   }
 
-  const admin = createAdminClient();
+  const pool = getPool();
 
-  const { data: booking, error: readError } = await admin
-    .from("bookings")
-    .select("id, razorpay_order_id, status")
-    .eq("id", bookingId)
-    .maybeSingle();
+  const { rows: bookingRows } = await pool.query<{
+    id: string;
+    razorpay_order_id: string | null;
+    status: string;
+  }>(`SELECT id, razorpay_order_id, status::text AS status FROM bookings WHERE id = $1 LIMIT 1`, [bookingId]);
 
-  if (readError) {
-    console.error("[verify-payment] booking read", readError);
-    return NextResponse.json({ error: "Could not load booking" }, { status: 500 });
-  }
-
+  const booking = bookingRows[0];
   if (!booking) {
     return NextResponse.json({ error: "Booking not found" }, { status: 404 });
   }
@@ -107,24 +103,20 @@ export async function POST(request: Request) {
     );
   }
 
-  const { data: confirmedId, error: rpcError } = await admin.rpc("confirm_booking_payment", {
-    p_order_id: razorpay_order_id,
-    p_payment_id: razorpay_payment_id,
-  });
+  const { rows: confirmRows } = await pool.query<{ booking_id: string | null }>(
+    `SELECT confirm_booking_payment($1::text, $2::text) AS booking_id`,
+    [razorpay_order_id, razorpay_payment_id],
+  );
 
-  if (rpcError) {
-    console.error("[verify-payment] confirm_booking_payment", rpcError);
-    return NextResponse.json({ error: "Could not confirm booking" }, { status: 500 });
-  }
+  const confirmedId = confirmRows[0]?.booking_id;
 
   if (!confirmedId) {
-    const { data: again } = await admin
-      .from("bookings")
-      .select("id, status")
-      .eq("id", bookingId)
-      .maybeSingle();
+    const { rows: again } = await pool.query<{ status: string }>(
+      `SELECT status::text AS status FROM bookings WHERE id = $1 LIMIT 1`,
+      [bookingId],
+    );
 
-    if (again?.status === "confirmed") {
+    if (again[0]?.status === "confirmed") {
       return NextResponse.json({ ok: true, bookingId, alreadyConfirmed: true });
     }
 

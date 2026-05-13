@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -15,26 +14,31 @@ export default function AdminLoginPage() {
     e.preventDefault();
     setLoading(true);
     setError(null);
-    const supabase = createClient();
-    const { error: signErr } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    setLoading(false);
-    if (signErr) {
-      setError(signErr.message);
-      return;
+    try {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim(), password }),
+        credentials: "include",
+      });
+      const data = (await res.json()) as { error?: string };
+      if (!res.ok) {
+        setError(data.error ?? "Sign in failed");
+        setLoading(false);
+        return;
+      }
+      router.replace("/admin");
+      router.refresh();
+    } catch {
+      setError("Network error");
     }
-    router.replace("/admin");
-    router.refresh();
+    setLoading(false);
   };
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-md flex-col justify-center px-4 py-12 sm:px-6">
       <h1 className="text-2xl font-semibold text-white">Admin sign in</h1>
-      <p className="mt-2 text-sm text-emerald-100/70">
-        Use the account credentials to login.
-      </p>
+      <p className="mt-2 text-sm text-emerald-100/70">Use your admin email and password (stored in Postgres).</p>
       <form onSubmit={(e) => void onSubmit(e)} className="mt-8 space-y-4 rounded-2xl border border-emerald-800/50 bg-[#042f1f]/60 p-6">
         {error ? (
           <p className="text-sm text-red-300" role="alert">
