@@ -101,12 +101,24 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Could not link payment order" }, { status: 500 });
     }
 
+    // Prefer RAZORPAY_KEY_ID: it is read at runtime. NEXT_PUBLIC_* can be empty in production if
+    // the image was built without that env (Razorpay then requests .../build/undefined).
+    const keyId =
+      cleanEnv(process.env.RAZORPAY_KEY_ID) || cleanEnv(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
+    if (!keyId) {
+      console.error("[initiate] missing RAZORPAY_KEY_ID and NEXT_PUBLIC_RAZORPAY_KEY_ID");
+      return NextResponse.json(
+        { error: "Payment is not configured (missing Razorpay key id on server)" },
+        { status: 503 },
+      );
+    }
+
     return NextResponse.json({
       bookingId: booking.id,
       orderId: order.id,
       amount: booking.amount_paise,
       currency: booking.currency,
-      keyId: cleanEnv(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID),
+      keyId,
     });
   } catch (e) {
     console.error(e);

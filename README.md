@@ -28,7 +28,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
    - Database: `DATABASE_URL` **or** `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, etc.
    - `ADMIN_SESSION_SECRET` — long random string (used to sign the admin session cookie).
-   - Razorpay and optional Twilio variables as documented below.
+   - Razorpay: `RAZORPAY_KEY_SECRET`, webhook secret, and **`RAZORPAY_KEY_ID`** (or `NEXT_PUBLIC_RAZORPAY_KEY_ID`) — same Key ID from the Razorpay dashboard. Prefer **`RAZORPAY_KEY_ID`** in Docker or any host where env is injected only at container start (so checkout still gets a key if `NEXT_PUBLIC_*` was not present during `npm run build`).
 
 4. **Booking notifications (after successful payment)**
 

@@ -177,12 +177,19 @@ export default function BookPage() {
         throw new Error(msg || "Could not start checkout");
       }
 
+      const keyId = typeof data.keyId === "string" ? data.keyId.trim() : "";
+      const orderId = typeof data.orderId === "string" ? data.orderId.trim() : "";
+      const bookingId = typeof data.bookingId === "string" ? data.bookingId.trim() : "";
+      if (!keyId || !orderId || !bookingId) {
+        throw new Error("Payment could not start: incomplete server response. Check Razorpay env on the server.");
+      }
+
       const rzp = new window.Razorpay({
-        key: data.keyId as string,
+        key: keyId,
         currency: data.currency as string,
         name: "AIbowler",
         description: "Practice slot booking",
-        order_id: data.orderId as string,
+        order_id: orderId,
         prefill: {
           name: name.trim(),
           contact: phone.trim(),
@@ -194,7 +201,7 @@ export default function BookPage() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                bookingId: data.bookingId as string,
+                bookingId,
                 razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
                 razorpay_signature: response.razorpay_signature,
@@ -212,7 +219,7 @@ export default function BookPage() {
               setPaying(false);
               return;
             }
-            window.location.href = `/book/success?booking=${encodeURIComponent(data.bookingId as string)}`;
+            window.location.href = `/book/success?booking=${encodeURIComponent(bookingId)}`;
           } catch {
             setError("Could not verify payment. If you were charged, contact support with your payment ID.");
             setPaying(false);
