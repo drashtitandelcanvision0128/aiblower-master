@@ -53,7 +53,7 @@ export async function GET() {
 
     return NextResponse.json({ slots: enriched });
   } catch (e) {
-    console.error(e);
+    console.error("GET /api/slots failed:", e);
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
   }
 }

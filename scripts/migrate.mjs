@@ -33,6 +33,27 @@ function getDatabaseUrl() {
   return `postgresql://${encUser}:${encPass}@${host}:${port}/${name}?sslmode=${sslMode}`;
 }
 
+async function waitForDatabase(maxAttempts = 20, delayMs = 3000) {
+  const url = getDatabaseUrl();
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      const testPool = new pg.Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 5000 });
+      await testPool.query("SELECT 1");
+      await testPool.end();
+      return;
+    } catch (err) {
+      if (attempt === maxAttempts) {
+        console.error(`Database did not become available after ${maxAttempts} attempts.`);
+        throw err;
+      }
+      console.log(`Waiting for database connection... (${attempt}/${maxAttempts})`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
+await waitForDatabase();
+
 const files = (await readdir(migrationsDir))
   .filter((f) => f.endsWith(".sql"))
   .sort();
