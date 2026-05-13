@@ -26,6 +26,8 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
    Copy [`.env.example`](.env.example) to `.env` or `.env.local` and set:
 
+   For **Coolify / VPS production**, see also [`.env.production.example`](.env.production.example) (same variables, deployment-focused comments). **Do not add Supabase** — this project does not use it; a Supabase error in logs means an outdated build is still running (see README deploy section).
+
    - Database: `DATABASE_URL` **or** `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, etc.
    - `ADMIN_SESSION_SECRET` — long random string (used to sign the admin session cookie).
    - Razorpay: `RAZORPAY_KEY_SECRET`, webhook secret, and **`RAZORPAY_KEY_ID`** (or `NEXT_PUBLIC_RAZORPAY_KEY_ID`) — same Key ID from the Razorpay dashboard. Prefer **`RAZORPAY_KEY_ID`** in Docker or any host where env is injected only at container start (so checkout still gets a key if `NEXT_PUBLIC_*` was not present during `npm run build`).

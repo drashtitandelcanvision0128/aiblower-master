@@ -7,10 +7,11 @@ function cleanEnv(value: string | undefined) {
 }
 
 export function getRazorpay() {
-  const key_id = cleanEnv(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
+  const key_id =
+    cleanEnv(process.env.RAZORPAY_KEY_ID) || cleanEnv(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
   const key_secret = cleanEnv(process.env.RAZORPAY_KEY_SECRET);
   if (!key_id || !key_secret) {
-    throw new Error("Missing NEXT_PUBLIC_RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET");
+    throw new Error("Missing RAZORPAY_KEY_ID (or NEXT_PUBLIC_RAZORPAY_KEY_ID) or RAZORPAY_KEY_SECRET");
   }
   return new Razorpay({ key_id, key_secret });
 }
