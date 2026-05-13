@@ -20,7 +20,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 2. **PostgreSQL**
 
    - Install Postgres locally or use a managed instance.
-   - Run SQL migrations **in order** from [`supabase/migrations`](supabase/migrations) (e.g. `psql` with your connection string, or any SQL client). The folder name is historical; migrations are plain Postgres.
+   - Run SQL migrations **in order** from [`db/migrations`](db/migrations) (e.g. `psql` with your connection string, or any SQL client).
 
 3. **Environment**
 
@@ -37,7 +37,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
    - **Admin WhatsApp:** `ADMIN_NOTIFY_WHATSAPP_E164` (E.164, e.g. `+919876543210`). Twilio WhatsApp [sandbox](https://www.twilio.com/docs/whatsapp/sandbox): set `TWILIO_WHATSAPP_FROM` to the sandbox sender (e.g. `whatsapp:+14155238886`). **You must join the sandbox** from the phone that owns that E.164 (send Twilio’s join code to the sandbox WhatsApp number) or admin WhatsApp notifications will not arrive.
    - **Customer SMS confirmation:** set `TWILIO_SMS_FROM` (your Twilio SMS number or Messaging Service SID) to send a short SMS to the booking mobile.
 
-   Apply the migration that adds `notifications_sent_at` tracking to `bookings` (see `supabase/migrations`).
+   Apply the migration that adds `notifications_sent_at` tracking to `bookings` (see `db/migrations`).
 
 5. **Razorpay webhook**
 
@@ -76,8 +76,10 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
 2. **Hosting**
 
+   - This app uses `output: 'standalone'`. After `npm run build`, run **`npm run start`** (which runs `node .next/standalone/server.js`). Do **not** run `next start` alone; it does not load the standalone bundle correctly and may surface stale errors.
    - Deploy as a **Node** app running `npm run build` then `npm run start`, or use **[Vercel](https://vercel.com/)** (recommended for Next.js): import the GitHub repo, framework preset Next.js, Node **20+**.
-   - In the host’s **Environment Variables** UI, copy every variable from your local `.env.local` (same names as [`.env.example`](.env.example)). Use **production** Razorpay keys and webhook secret when you go live.
+   - In the host’s **Environment Variables** UI, copy every variable from your local `.env.local` (same names as [`.env.example`](.env.example)). There are **no** Supabase variables; the database is PostgreSQL via `DATABASE_URL` / `DB_*`. Use **production** Razorpay keys and webhook secret when you go live.
+   - After pulling code changes, **rebuild** (`npm run build`) before starting production. An old `.next` folder can still contain removed dependencies until you rebuild.
 
 3. **URLs**
 
@@ -92,7 +94,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
 - `src/app` – routes (home, book, admin)
 - `src/app/api` – booking initiation, Razorpay webhook, admin APIs
-- `supabase/migrations` – SQL schema and seed (Postgres only)
+- `db/migrations` – SQL schema and seed (Postgres)
 
 ## Scripts
 
@@ -101,4 +103,4 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
 | `npm run lint` | ESLint             |
-| `npm run migrate` | Apply SQL migrations in `supabase/migrations` (tracked in `schema_migrations`; safe to re-run) |
+| `npm run migrate` | Apply SQL migrations in `db/migrations` (tracked in `schema_migrations`; safe to re-run) |

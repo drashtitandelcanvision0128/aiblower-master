@@ -9,7 +9,7 @@ const root = join(__dirname, "..");
 
 dotenv.config({ path: join(root, ".env") });
 dotenv.config({ path: join(root, ".env.local") });
-const migrationsDir = join(root, "supabase", "migrations");
+const migrationsDir = join(root, "db", "migrations");
 
 function getDatabaseUrl() {
   const direct = process.env.DATABASE_URL?.trim();
@@ -59,7 +59,7 @@ const files = (await readdir(migrationsDir))
   .sort();
 
 if (files.length === 0) {
-  console.error("No .sql files in supabase/migrations");
+  console.error("No .sql files in db/migrations");
   process.exit(1);
 }
 
