@@ -26,7 +26,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
    Copy [`.env.example`](.env.example) to `.env` or `.env.local` and set:
 
-   For **Coolify / VPS production**, see also [`.env.production.example`](.env.production.example) (same variables, deployment-focused comments). If production logs mention env vars for a database layer you do not use, the server is usually still running a **stale `.next` folder** or the wrong start command — see **Hosting** below and run `npm run clean && npm run build` before `npm run start`.
+   For **Coolify / VPS production**, see also [`.env.production.example`](.env.production.example) (same variables, deployment-focused comments). If production logs mention env vars for a database layer you do not use, the server is usually still running a **stale `.next` folder** — see **Hosting** below and run `npm run clean && npm run build` before `npm run start`.
 
    - Database: `DATABASE_URL` **or** `DB_HOST`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, etc.
    - `ADMIN_SESSION_SECRET` — long random string (used to sign the admin session cookie).
@@ -78,10 +78,10 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
 2. **Hosting**
 
-   - This app uses `output: 'standalone'`. After `npm run build`, run **`npm run start`** (runs [`scripts/start-production.mjs`](scripts/start-production.mjs), which starts `node .next/standalone/server.js`). Do **not** run `next start` alone; it is wrong for this config and can load an **old** `.next` tree from a previous deploy.
+   - Build with **`npm run build`**, then run **`npm run start`**. This project uses standard Next.js production mode, so `npm run start` runs `next start`.
    - Deploy as a **Node** app running `npm run build` then `npm run start`, or use **[Vercel](https://vercel.com/)** (recommended for Next.js): import the GitHub repo, framework preset Next.js, Node **20+**.
    - In the host’s **Environment Variables** UI, copy every variable from your local `.env.local` (same names as [`.env.example`](.env.example)). The database is PostgreSQL via `DATABASE_URL` / `DB_*`. Use **production** Razorpay keys and webhook secret when you go live.
-   - After pulling code changes, run **`npm run clean && npm run build`** (or delete `.next` manually) before **`npm run start`**. Coolify and some panels default to **`next start`** — override the start command to **`npm run start`**.
+   - After pulling code changes, run **`npm run clean && npm run build`** (or delete `.next` manually) before **`npm run start`**. This removes old compiled chunks from previous deploys.
 
 3. **URLs**
 
