@@ -10,7 +10,11 @@
     "build": "next build",
     "clean": "node scripts/clean-build.mjs",
     "rebuild": "npm run clean && npm run build",
+<<<<<<< HEAD
     "start": "node scripts/run-prod-server.mjs",
+=======
+    "start": "node scripts/migrate.mjs && next start",
+>>>>>>> 4367b9ff6ae706dbbce19686332fbb0aeb443123
     "lint": "eslint",
     "create-admin": "node scripts/create-admin.mjs",
     "migrate": "node scripts/migrate.mjs"
