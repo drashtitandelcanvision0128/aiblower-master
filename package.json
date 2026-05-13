@@ -10,7 +10,7 @@
     "build": "next build",
     "clean": "node scripts/clean-build.mjs",
     "rebuild": "npm run clean && npm run build",
-    "start": "next start",
+    "start": "node scripts/run-prod-server.mjs",
     "lint": "eslint",
     "create-admin": "node scripts/create-admin.mjs",
     "migrate": "node scripts/migrate.mjs"

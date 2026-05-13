@@ -20,7 +20,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 2. **PostgreSQL**
 
    - Install Postgres locally or use a managed instance.
-   - Run SQL migrations **in order** from [`db/migrations`](db/migrations) (e.g. `psql` with your connection string, or any SQL client).
+   - Apply the schema once: **`npm run migrate`** (reads `DATABASE_URL` / `DB_*` from `.env`). After that, **`npm run start`** (production) also runs migrations automatically before `next start`, so Coolify/Docker/VPS deploys do not need a separate migrate command.
 
 3. **Environment**
 
@@ -78,7 +78,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 
 2. **Hosting**
 
-   - Build with **`npm run build`**, then run **`npm run start`**. This project uses standard Next.js production mode, so `npm run start` runs `next start`.
+   - Build with **`npm run build`**, then run **`npm run start`**. `npm run start` runs **`node scripts/migrate.mjs`** first (idempotent; uses `schema_migrations`), then **`next start`**. Use the repo **[`Dockerfile`](Dockerfile)** on Coolify so the container runs the same `npm run start`. If the host overrides the start command, set it to **`npm run start`** — not plain **`next start`** alone — or migrations will be skipped.
    - Deploy as a **Node** app running `npm run build` then `npm run start`, or use **[Vercel](https://vercel.com/)** (recommended for Next.js): import the GitHub repo, framework preset Next.js, Node **20+**.
    - In the host’s **Environment Variables** UI, copy every variable from your local `.env.local` (same names as [`.env.example`](.env.example)). The database is PostgreSQL via `DATABASE_URL` / `DB_*`. Use **production** Razorpay keys and webhook secret when you go live.
    - After pulling code changes, run **`npm run clean && npm run build`** (or delete `.next` manually) before **`npm run start`**. This removes old compiled chunks from previous deploys.
@@ -104,6 +104,7 @@ Web platform for **AIbowler** batting practice with a bowling machine: marketing
 | --------- | ------------------ |
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
+| `npm run start` | Run SQL migrations, then `next start` (production) |
 | `npm run clean` | Delete `.next` (clears stale compiled output; stop `npm run dev` first on Windows if this errors with EBUSY) |
 | `npm run rebuild` | `clean` then `build` |
 | `npm run lint` | ESLint             |
