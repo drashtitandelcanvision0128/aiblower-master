@@ -54,6 +54,9 @@ export async function GET() {
     return NextResponse.json({ slots: enriched });
   } catch (e) {
     console.error("GET /api/slots failed:", e);
+    if (e instanceof Error && e.message.startsWith("Database not configured")) {
+      return NextResponse.json({ error: e.message }, { status: 503 });
+    }
     return NextResponse.json({ error: "Server misconfiguration" }, { status: 500 });
   }
 }
