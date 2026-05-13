@@ -8,7 +8,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "node .next/standalone/server.js",
+    "start": "node scripts/start-production.mjs",
     "lint": "eslint",
     "create-admin": "node scripts/create-admin.mjs",
     "migrate": "node scripts/migrate.mjs"
