@@ -1,5 +1,5 @@
--- Default admin: admin@gmail.com / Admin123 — change password from /admin after first login.
--- If the row already exists (e.g. wrong hash), reset hash so deploy stays self-contained.
+-- Recovery: some DBs had every migration filename recorded without running SQL (old migrate bootstrap).
+-- Safe to re-run: keeps admin@gmail.com / Admin123 in sync with app login.
 
 update public.admin_users
 set

@@ -84,17 +84,15 @@ try {
       ) AS e
     `);
     if (existsRows[0]?.e) {
-      for (const name of files) {
-        await pool.query(
-          `INSERT INTO public.schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
-          [name],
-        );
-      }
-      console.log(
-        "Detected existing public.bookings (schema already present). Recorded current migration files as applied without re-running SQL.",
+      const baseline =
+        files.find((f) => /(^|_)initial\.sql$/i.test(f) || f.toLowerCase().includes("initial")) ?? files[0];
+      await pool.query(
+        `INSERT INTO public.schema_migrations (filename) VALUES ($1) ON CONFLICT (filename) DO NOTHING`,
+        [baseline],
       );
-      await pool.end();
-      process.exit(0);
+      console.log(
+        `Detected existing public.bookings with empty migration history. Marked ${baseline} as applied; newer .sql files will still run.`,
+      );
     }
   }
 
