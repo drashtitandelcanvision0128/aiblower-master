@@ -30,6 +30,7 @@ create table public.bookings (
   status public.booking_status not null default 'pending_payment',
   razorpay_order_id text,
   razorpay_payment_id text,
+  notifications_sent_at timestamptz,
   amount_paise integer not null check (amount_paise > 0),
   currency text not null default 'INR',
   created_at timestamptz not null default now(),
