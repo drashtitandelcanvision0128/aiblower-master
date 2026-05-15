@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
+import {
+  bookingDateFromSlotStart,
+  getBookingPricePaise,
+  type BookingType,
+} from "@/lib/booking-types";
 import { getPool } from "@/lib/db/pool";
 import { getRazorpay } from "@/lib/razorpay";
+import { pendingBookingCutoffIso, PENDING_BOOKING_TTL_MS } from "@/lib/slot-availability";
 import { initiateBookingSchema } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
-
-const PENDING_TTL_MS = 30 * 60 * 1000;
 
 function cleanEnv(value: string | undefined) {
   if (!value) return "";
@@ -24,25 +28,24 @@ export async function POST(request: Request) {
       );
     }
 
-    const { slotId, customerName, customerPhone } = parsed.data;
+    const { slotId, bookingType, customerName, customerPhone } = parsed.data;
     const pool = getPool();
+    const pendingCutoff = pendingBookingCutoffIso();
 
-    const cutoff = new Date(Date.now() - PENDING_TTL_MS).toISOString();
     await pool.query(
       `UPDATE bookings SET status = 'expired', updated_at = now()
        WHERE status = 'pending_payment' AND created_at < $1::timestamptz`,
-      [cutoff],
+      [pendingCutoff],
     );
 
     const { rows: slotRows } = await pool.query<{
       id: string;
       start_at: Date;
       end_at: Date;
-      price_paise: number;
       capacity: number;
       is_active: boolean;
     }>(
-      `SELECT id, start_at, end_at, price_paise, capacity, is_active
+      `SELECT id, start_at, end_at, capacity, is_active
        FROM slots WHERE id = $1 LIMIT 1`,
       [slotId],
     );
@@ -57,13 +60,24 @@ export async function POST(request: Request) {
     }
 
     const { rows: countRows } = await pool.query<{ n: string }>(
-      `SELECT count(*)::text AS n FROM bookings WHERE slot_id = $1 AND status = 'confirmed'`,
-      [slotId],
+      `
+      SELECT count(*)::text AS n
+      FROM bookings
+      WHERE slot_id = $1
+        AND (
+          status = 'confirmed'
+          OR (status = 'pending_payment' AND created_at >= $2::timestamptz)
+        )
+      `,
+      [slotId, pendingCutoff],
     );
-    const confirmedCount = Number(countRows[0]?.n ?? 0);
-    if (confirmedCount >= slot.capacity) {
+    const heldCount = Number(countRows[0]?.n ?? 0);
+    if (heldCount >= slot.capacity) {
       return NextResponse.json({ error: "This slot is already booked" }, { status: 409 });
     }
+
+    const amountPaise = getBookingPricePaise(bookingType as BookingType);
+    const bookingDate = bookingDateFromSlotStart(slot.start_at);
 
     const { rows: bookingRows } = await pool.query<{
       id: string;
@@ -71,10 +85,17 @@ export async function POST(request: Request) {
       currency: string;
     }>(
       `INSERT INTO bookings (
-        slot_id, customer_name, customer_phone, status, amount_paise, currency
-      ) VALUES ($1, $2, $3, 'pending_payment', $4, 'INR')
+        slot_id,
+        customer_name,
+        customer_phone,
+        status,
+        amount_paise,
+        currency,
+        booking_type,
+        booking_date
+      ) VALUES ($1, $2, $3, 'pending_payment', $4, 'INR', $5::booking_ball_type, $6::date)
       RETURNING id, amount_paise, currency`,
-      [slotId, customerName, customerPhone, slot.price_paise],
+      [slotId, customerName, customerPhone, amountPaise, bookingType, bookingDate],
     );
 
     const booking = bookingRows[0];
@@ -90,6 +111,7 @@ export async function POST(request: Request) {
       receipt,
       notes: {
         booking_id: booking.id,
+        booking_type: bookingType,
       },
     });
 
@@ -101,8 +123,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Could not link payment order" }, { status: 500 });
     }
 
-    // Prefer RAZORPAY_KEY_ID: it is read at runtime. NEXT_PUBLIC_* can be empty in production if
-    // the image was built without that env (Razorpay then requests .../build/undefined).
     const keyId =
       cleanEnv(process.env.RAZORPAY_KEY_ID) || cleanEnv(process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID);
     if (!keyId) {
@@ -119,6 +139,9 @@ export async function POST(request: Request) {
       amount: booking.amount_paise,
       currency: booking.currency,
       keyId,
+      bookingType,
+      bookingDate,
+      pendingTtlMs: PENDING_BOOKING_TTL_MS,
     });
   } catch (e) {
     console.error(e);

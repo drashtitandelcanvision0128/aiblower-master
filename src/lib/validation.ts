@@ -1,7 +1,9 @@
 import { z } from "zod";
+import { BOOKING_TYPES } from "@/lib/booking-types";
 
 export const initiateBookingSchema = z.object({
   slotId: z.string().uuid(),
+  bookingType: z.enum(BOOKING_TYPES),
   customerName: z.string().trim().min(2).max(120),
   customerPhone: z
     .string()

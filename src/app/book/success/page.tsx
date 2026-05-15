@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { BOOKING_TYPE_LABELS, type BookingType } from "@/lib/booking-types";
 import { formatInrFromPaise, formatSlotRange } from "@/lib/format";
 
 type BookingPayload = {
@@ -14,6 +15,8 @@ type BookingPayload = {
   currency: string;
   slotStart: string | null;
   slotEnd: string | null;
+  bookingType: string;
+  bookingDate: string;
 };
 
 function SuccessContent() {
@@ -76,7 +79,12 @@ function SuccessContent() {
       ) : null}
       {data.status === "confirmed" ? (
         <p className="rounded-lg border border-emerald-500/40 bg-emerald-950/40 px-4 py-3 text-sm text-emerald-50">
-          You&apos;re confirmed for <span className="font-medium">{slotLabel}</span>. We have{" "}
+          You&apos;re confirmed for{" "}
+          <span className="font-medium">
+            {BOOKING_TYPE_LABELS[data.bookingType as BookingType] ?? data.bookingType}
+          </span>{" "}
+          on <span className="font-medium">{data.bookingDate}</span> at{" "}
+          <span className="font-medium">{slotLabel}</span>. We have{" "}
           <span className="font-medium">{data.customerName}</span> on{" "}
           <span className="font-medium">{data.customerPhone}</span>. Amount{" "}
           {formatInrFromPaise(data.amountPaise)}.

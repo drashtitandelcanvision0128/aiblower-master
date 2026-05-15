@@ -1,23 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
 import Script from "next/script";
+import {
+  BOOKING_TYPE_LABELS,
+  BOOKING_TYPE_PRICE_PAISE,
+  type BookingType,
+  isWeekendDateKey,
+} from "@/lib/booking-types";
 import { formatInrFromPaise } from "@/lib/format";
 
 type Slot = {
   id: string;
   start_at: string;
   end_at: string;
-  price_paise: number;
   status: "available" | "booked";
   is_booked: boolean;
 };
+
+const BOOKING_OPTIONS: BookingType[] = ["tennis_ball", "leather_ball"];
 
 export default function BookPage() {
   const [slots, setSlots] = useState<Slot[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [bookingType, setBookingType] = useState<BookingType>("tennis_ball");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
@@ -106,6 +114,12 @@ export default function BookPage() {
       )
     : 0;
 
+  const selectedPricePaise = BOOKING_TYPE_PRICE_PAISE[bookingType];
+  const selectedIsWeekend = selectedDateKey ? isWeekendDateKey(selectedDateKey) : false;
+  const scheduleHint = selectedIsWeekend
+    ? "Weekend (Sat–Sun): 30-minute slots from 8:00 AM to 9:00 PM."
+    : "Weekday (Mon–Fri): 30-minute slots from 8:00 PM to 9:00 PM only.";
+
   useEffect(() => {
     if (!selected) {
       const t = window.setTimeout(
@@ -116,35 +130,36 @@ export default function BookPage() {
     }
   }, [daySlots, selected]);
 
-  const periodSlots = {
-    Morning: daySlots.filter((s) => {
-      const hour = new Date(s.start_at).toLocaleString("en-US", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: "Asia/Kolkata",
-      });
-      const h = Number(hour);
-      return h >= 5 && h < 12;
-    }),
-    Afternoon: daySlots.filter((s) => {
-      const hour = new Date(s.start_at).toLocaleString("en-US", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: "Asia/Kolkata",
-      });
-      const h = Number(hour);
-      return h >= 12 && h < 17;
-    }),
-    Evening: daySlots.filter((s) => {
-      const hour = new Date(s.start_at).toLocaleString("en-US", {
-        hour: "numeric",
-        hour12: false,
-        timeZone: "Asia/Kolkata",
-      });
-      const h = Number(hour);
-      return h >= 17 && h <= 23;
-    }),
-  };
+  const periodSlots = useMemo(() => {
+    const hourInIst = (iso: string) =>
+      Number(
+        new Date(iso).toLocaleString("en-US", {
+          hour: "numeric",
+          hour12: false,
+          timeZone: "Asia/Kolkata",
+        }),
+      );
+
+    return {
+      Morning: daySlots.filter((s) => {
+        const h = hourInIst(s.start_at);
+        return h >= 5 && h < 12;
+      }),
+      Afternoon: daySlots.filter((s) => {
+        const h = hourInIst(s.start_at);
+        return h >= 12 && h < 17;
+      }),
+      Evening: daySlots.filter((s) => {
+        const h = hourInIst(s.start_at);
+        return h >= 17 && h <= 23;
+      }),
+    };
+  }, [daySlots]);
+
+  const periodEntries = useMemo(
+    () => Object.entries(periodSlots).filter(([, list]) => list.length > 0),
+    [periodSlots],
+  );
 
   const openCheckout = async () => {
     if (!selected || !name.trim() || !/^[6-9]\d{9}$/.test(phone.trim())) {
@@ -164,6 +179,7 @@ export default function BookPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slotId: selected.id,
+          bookingType,
           customerName: name.trim(),
           customerPhone: phone.trim(),
         }),
@@ -184,11 +200,12 @@ export default function BookPage() {
         throw new Error("Payment could not start: incomplete server response. Check Razorpay env on the server.");
       }
 
+      const typeLabel = BOOKING_TYPE_LABELS[bookingType];
       const rzp = new window.Razorpay({
         key: keyId,
         currency: data.currency as string,
         name: "AIbowler",
-        description: "Practice slot booking",
+        description: `${typeLabel} — ${formatTime(selected.start_at)}`,
         order_id: orderId,
         prefill: {
           name: name.trim(),
@@ -279,6 +296,34 @@ export default function BookPage() {
             ) : null}
 
             <div className="mt-8">
+              <p className="text-sm font-medium text-emerald-100">Booking type</p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                {BOOKING_OPTIONS.map((type) => {
+                  const active = bookingType === type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setBookingType(type)}
+                      className={`rounded-xl border px-4 py-4 text-left transition ${
+                        active
+                          ? "border-emerald-400 bg-emerald-400/15 ring-1 ring-emerald-400"
+                          : "border-emerald-900/60 bg-[#15211b] hover:border-emerald-700"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-emerald-50">
+                        {BOOKING_TYPE_LABELS[type]}
+                      </p>
+                      <p className="mt-1 text-lg font-semibold text-emerald-300">
+                        {formatInrFromPaise(BOOKING_TYPE_PRICE_PAISE[type])}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-8">
               <p className="text-sm font-medium text-emerald-100">Select Date</p>
               <div className="mt-4 flex flex-wrap gap-3">
                 {groupedDates.map((d) => (
@@ -299,6 +344,12 @@ export default function BookPage() {
                 ))}
               </div>
             </div>
+
+            {selectedDateKey ? (
+              <p className="mt-6 rounded-lg border border-emerald-800/60 bg-[#062116] px-4 py-3 text-sm text-emerald-100/85">
+                {scheduleHint}
+              </p>
+            ) : null}
 
             <div className="mt-10 flex flex-wrap items-center justify-between gap-3">
               <p className="text-lg font-medium text-emerald-100">Available Slots</p>
@@ -322,37 +373,36 @@ export default function BookPage() {
               <p className="mt-6 text-sm text-emerald-200/70">Loading slots…</p>
             ) : (
               <div className="mt-5 space-y-7">
-                {Object.entries(periodSlots).map(([label, list]) => (
+                {periodEntries.length === 0 ? (
+                  <p className="text-sm text-emerald-100/60">No slots available for this date.</p>
+                ) : null}
+                {periodEntries.map(([label, list]) => (
                   <div key={label}>
                     <p className="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-200/80">
                       {label}
                     </p>
                     <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      {list.length === 0 ? (
-                        <p className="text-xs text-emerald-100/50">No slots in this period</p>
-                      ) : (
-                        list.map((slot) => {
-                          const isSelected = selectedId === slot.id;
-                          const isDisabled = slot.is_booked;
-                          return (
-                            <button
-                              key={slot.id}
-                              type="button"
-                              disabled={isDisabled}
-                              onClick={() => setSelectedId(slot.id)}
-                              className={`rounded-lg border px-4 py-3 text-sm font-medium transition ${
-                                isDisabled
-                                  ? "cursor-not-allowed border-[#3b413d] bg-[#272f2a] text-emerald-50/30"
-                                  : isSelected
-                                    ? "border-emerald-300 bg-emerald-400 text-emerald-950"
-                                    : "border-emerald-900/50 bg-[#1d2520] text-emerald-50 hover:border-emerald-600"
-                              }`}
-                            >
-                              {formatTime(slot.start_at)}
-                            </button>
-                          );
-                        })
-                      )}
+                      {list.map((slot) => {
+                        const isSelected = selectedId === slot.id;
+                        const isDisabled = slot.is_booked;
+                        return (
+                          <button
+                            key={slot.id}
+                            type="button"
+                            disabled={isDisabled}
+                            onClick={() => setSelectedId(slot.id)}
+                            className={`rounded-lg border px-4 py-3 text-sm font-medium transition ${
+                              isDisabled
+                                ? "cursor-not-allowed border-[#3b413d] bg-[#272f2a] text-emerald-50/30"
+                                : isSelected
+                                  ? "border-emerald-300 bg-emerald-400 text-emerald-950"
+                                  : "border-emerald-900/50 bg-[#1d2520] text-emerald-50 hover:border-emerald-600"
+                            }`}
+                          >
+                            {formatTime(slot.start_at)}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 ))}
@@ -387,14 +437,16 @@ export default function BookPage() {
                     <span>{selected ? `${selectedDurationMins} mins` : "—"}</span>
                   </div>
                   <div className="flex items-center justify-between border-b border-emerald-100/10 pb-2">
-                    <span>Package</span>
-                    <span>Elite Session</span>
+                    <span>Booking type</span>
+                    <span className="text-right text-emerald-300">
+                      {BOOKING_TYPE_LABELS[bookingType]}
+                    </span>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs uppercase tracking-[0.22em] text-emerald-100/60">Total Amount</p>
                   <p className="mt-1 text-4xl font-semibold text-emerald-400">
-                    {selected ? formatInrFromPaise(selected.price_paise) : "—"}
+                    {selected ? formatInrFromPaise(selectedPricePaise) : "—"}
                   </p>
                 </div>
                 <div className="space-y-3">

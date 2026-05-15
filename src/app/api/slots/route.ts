@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getPool } from "@/lib/db/pool";
+import { pendingBookingCutoffIso } from "@/lib/slot-availability";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,6 @@ type SlotRow = {
   id: string;
   start_at: Date;
   end_at: Date;
-  price_paise: number;
   capacity: number;
 };
 
@@ -15,37 +15,44 @@ export async function GET() {
   try {
     const pool = getPool();
     const nowIso = new Date().toISOString();
+    const pendingCutoff = pendingBookingCutoffIso();
 
     const { rows: slots } = await pool.query<SlotRow>(
       `
-      SELECT id, start_at, end_at, price_paise, capacity
+      SELECT id, start_at, end_at, capacity
       FROM slots
       WHERE is_active = true AND start_at > $1::timestamptz
       ORDER BY start_at ASC
-      LIMIT 500
+      LIMIT 800
       `,
       [nowIso],
     );
 
-    const { rows: confirmed } = await pool.query<{ slot_id: string }>(
-      `SELECT slot_id FROM bookings WHERE status = 'confirmed'`,
+    const { rows: holds } = await pool.query<{ slot_id: string; n: string }>(
+      `
+      SELECT slot_id, count(*)::text AS n
+      FROM bookings
+      WHERE status = 'confirmed'
+         OR (status = 'pending_payment' AND created_at >= $1::timestamptz)
+      GROUP BY slot_id
+      `,
+      [pendingCutoff],
     );
 
     const counts = new Map<string, number>();
-    for (const row of confirmed) {
-      counts.set(row.slot_id, (counts.get(row.slot_id) ?? 0) + 1);
+    for (const row of holds) {
+      counts.set(row.slot_id, Number(row.n));
     }
 
     const enriched = slots.map((s) => {
-      const confirmedCount = counts.get(s.id) ?? 0;
-      const isBooked = confirmedCount >= s.capacity;
+      const heldCount = counts.get(s.id) ?? 0;
+      const isBooked = heldCount >= s.capacity;
       return {
         id: s.id,
         start_at: s.start_at.toISOString(),
         end_at: s.end_at.toISOString(),
-        price_paise: s.price_paise,
         capacity: s.capacity,
-        booked_count: confirmedCount,
+        booked_count: heldCount,
         is_booked: isBooked,
         status: isBooked ? "booked" : "available",
       };
