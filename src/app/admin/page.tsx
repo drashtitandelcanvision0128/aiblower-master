@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { BOOKING_TYPE_LABELS, type BookingType } from "@/lib/booking-types";
 import { formatInrFromPaise, formatSlotRange } from "@/lib/format";
 import { adminBookingPatchSchema } from "@/lib/validation";
 
@@ -25,6 +26,8 @@ type BookingRow = {
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
   slot_id: string;
+  booking_type: string;
+  booking_date: string;
   slots: SlotRow | SlotRow[] | null;
 };
 
@@ -409,6 +412,7 @@ export default function AdminDashboardPage() {
             <thead className="bg-[#042f1f]/80 text-xs uppercase tracking-wide text-emerald-300/90">
               <tr>
                 <th className="px-4 py-3">When</th>
+                <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Customer</th>
                 <th className="px-4 py-3">Phone</th>
                 <th className="px-4 py-3">Status</th>
@@ -421,6 +425,9 @@ export default function AdminDashboardPage() {
               {filtered.map((b) => (
                 <tr key={b.id} className="text-emerald-50/95">
                   <td className="whitespace-nowrap px-4 py-3">{slotLabel(b)}</td>
+                  <td className="px-4 py-3 text-xs">
+                    {BOOKING_TYPE_LABELS[b.booking_type as BookingType] ?? b.booking_type}
+                  </td>
                   <td className="px-4 py-3">{b.customer_name}</td>
                   <td className="whitespace-nowrap px-4 py-3">{b.customer_phone}</td>
                   <td className="px-4 py-3 capitalize">{b.status.replace("_", " ")}</td>

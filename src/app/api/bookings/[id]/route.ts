@@ -16,6 +16,8 @@ export async function GET(_request: Request, { params }: Params) {
       customer_phone: string;
       amount_paise: number;
       currency: string;
+      booking_type: string;
+      booking_date: Date;
       start_at: Date | null;
       end_at: Date | null;
     }>(
@@ -27,6 +29,8 @@ export async function GET(_request: Request, { params }: Params) {
         b.customer_phone,
         b.amount_paise,
         b.currency,
+        b.booking_type::text AS booking_type,
+        b.booking_date,
         s.start_at,
         s.end_at
       FROM bookings b
@@ -49,6 +53,8 @@ export async function GET(_request: Request, { params }: Params) {
       customerPhone: data.customer_phone,
       amountPaise: data.amount_paise,
       currency: data.currency,
+      bookingType: data.booking_type,
+      bookingDate: data.booking_date.toISOString().slice(0, 10),
       slotStart: data.start_at?.toISOString() ?? null,
       slotEnd: data.end_at?.toISOString() ?? null,
     });

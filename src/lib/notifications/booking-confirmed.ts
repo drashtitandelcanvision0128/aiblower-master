@@ -1,3 +1,4 @@
+import { BOOKING_TYPE_LABELS, type BookingType } from "@/lib/booking-types";
 import { formatInrFromPaise, formatSlotRange } from "@/lib/format";
 import { getPool } from "@/lib/db/pool";
 import { indiaPhoneToE164 } from "@/lib/notifications/phone";
@@ -12,6 +13,8 @@ type BookingRow = {
   razorpay_payment_id: string | null;
   razorpay_order_id: string | null;
   notifications_sent_at: Date | null;
+  booking_type: string;
+  booking_date: Date;
   start_at: Date | null;
   end_at: Date | null;
 };
@@ -22,10 +25,14 @@ function buildDetailsText(row: BookingRow) {
       ? formatSlotRange(row.start_at.toISOString(), row.end_at.toISOString())
       : "Slot: (unknown)";
   const amount = formatInrFromPaise(row.amount_paise);
+  const typeLabel = BOOKING_TYPE_LABELS[row.booking_type as BookingType] ?? row.booking_type;
+  const dateLabel = row.booking_date.toISOString().slice(0, 10);
   return [
     `Booking ID: ${row.id}`,
     `Customer: ${row.customer_name}`,
     `Phone: ${row.customer_phone}`,
+    `Type: ${typeLabel}`,
+    `Date: ${dateLabel}`,
     slotLine,
     `Amount: ${amount}`,
     row.razorpay_payment_id ? `Payment: ${row.razorpay_payment_id}` : null,
@@ -52,6 +59,8 @@ export async function sendBookingConfirmedNotifications(bookingId: string) {
       b.razorpay_payment_id,
       b.razorpay_order_id,
       b.notifications_sent_at,
+      b.booking_type::text AS booking_type,
+      b.booking_date,
       s.start_at,
       s.end_at
     FROM bookings b
@@ -111,6 +120,8 @@ export async function sendBookingConfirmedNotifications(bookingId: string) {
       b.currency,
       b.razorpay_payment_id,
       b.razorpay_order_id,
+      b.booking_type::text AS booking_type,
+      b.booking_date,
       s.start_at,
       s.end_at
     `,

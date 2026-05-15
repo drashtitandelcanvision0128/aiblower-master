@@ -15,6 +15,8 @@ type Row = {
   razorpay_order_id: string | null;
   razorpay_payment_id: string | null;
   slot_id: string;
+  booking_type: string;
+  booking_date: Date;
   s_id: string;
   s_start_at: Date;
   s_end_at: Date;
@@ -44,6 +46,8 @@ export async function GET() {
         b.razorpay_order_id,
         b.razorpay_payment_id,
         b.slot_id,
+        b.booking_type::text AS booking_type,
+        b.booking_date,
         s.id AS s_id,
         s.start_at AS s_start_at,
         s.end_at AS s_end_at,
@@ -68,6 +72,8 @@ export async function GET() {
       razorpay_order_id: r.razorpay_order_id,
       razorpay_payment_id: r.razorpay_payment_id,
       slot_id: r.slot_id,
+      booking_type: r.booking_type,
+      booking_date: r.booking_date.toISOString().slice(0, 10),
       slots: {
         id: r.s_id,
         start_at: r.s_start_at.toISOString(),
